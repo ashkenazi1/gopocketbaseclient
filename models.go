@@ -1,4 +1,4 @@
-package mypocketbaseclient
+package gopocketbaseclient
 
 import "net/http"
 

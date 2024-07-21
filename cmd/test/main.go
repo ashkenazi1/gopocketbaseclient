@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log"
 
-	mypocketbaseclient "github.com/ashkenazi1/gopocketbaseclient"
+	"github.com/ashkenazi1/gopocketbaseclient"
 )
 
 func main() {
-	client := mypocketbaseclient.NewClient("https://xxx.pockethost.io", "your_jwt_token")
+	client := gopocketbaseclient.NewClient("https://xxx.pockethost.io", "your_jwt_token")
 
 	// Create a new record
 	// record := &mypocketbaseclient.Record{
@@ -23,7 +23,7 @@ func main() {
 	// }
 	// fmt.Printf("Created Record: %+v\n", newRecord)
 
-	data, err := mypocketbaseclient.All(client, "collection_name")
+	data, err := gopocketbaseclient.All(client, "collection_name")
 	if err != nil {
 		log.Fatal(err)
 	}
