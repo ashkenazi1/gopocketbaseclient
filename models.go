@@ -17,6 +17,6 @@ type BaseRecord struct {
 }
 
 type Record struct {
-	BaseRecord BaseRecord
-	Data       map[string]interface{} `json:"data"`
+	BaseRecord
+	Data map[string]interface{} `json:"data"`
 }

@@ -2,26 +2,28 @@ package gopocketbaseclient
 
 import (
 	"encoding/json"
+	"log"
 )
 
 type JSONItems struct {
 	Items json.RawMessage `json:"items"`
 }
 
-func (c *Client) CreateRecord(collection string, record *Record) (*Record, error) {
+func (c *Client) CreateRecord(collection string, record map[string]interface{}) error {
 	endpoint := "/api/collections/" + collection + "/records"
 	respBody, err := c.doRequest("POST", endpoint, record)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var createdRecord Record
+	var createdRecord map[string]interface{}
 	err = json.Unmarshal(respBody, &createdRecord)
 	if err != nil {
-		return nil, err
+		log.Println("Error unmarshaling response:", err)
+		return err
 	}
 
-	return &createdRecord, nil
+	return nil
 }
 
 func (c *Client) GetRecord(collection, id string) (*Record, error) {
@@ -40,20 +42,21 @@ func (c *Client) GetRecord(collection, id string) (*Record, error) {
 	return &record, nil
 }
 
-func (c *Client) UpdateRecord(collection, id string, record *Record) (*Record, error) {
+func (c *Client) UpdateRecord(collection, id string, record map[string]interface{}) error {
 	endpoint := "/api/collections/" + collection + "/records/" + id
 	respBody, err := c.doRequest("PATCH", endpoint, record)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var updatedRecord Record
+	var updatedRecord map[string]interface{}
 	err = json.Unmarshal(respBody, &updatedRecord)
 	if err != nil {
-		return nil, err
+		log.Println("Error unmarshaling response:", err)
+		return err
 	}
 
-	return &updatedRecord, nil
+	return nil
 }
 
 func (c *Client) DeleteRecord(collection, id string) error {

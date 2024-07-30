@@ -8,21 +8,22 @@ import (
 )
 
 func main() {
+
 	client := gopocketbaseclient.NewClient("https://xxx.pockethost.io", "your_jwt_token")
 
 	// Create a new record
-	// record := &mypocketbaseclient.Record{
-	// 	Data: map[string]interface{}{
-	// 		"field1": "value1",
-	// 		"field2": "value2",
-	// 	},
-	// }
-	// newRecord, err := client.CreateRecord("your_collection", record)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Printf("Created Record: %+v\n", newRecord)
+	row := map[string]interface{}{
+		"item1": "1",
+		"item2": "2",
+	}
 
+	err := client.CreateRecord("israeli_vehicles", row)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// Get a record
 	data, err := gopocketbaseclient.All(client, "collection_name")
 	if err != nil {
 		log.Fatal(err)

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 )
@@ -13,11 +13,10 @@ func NewClient(baseURL, jwtToken string) *Client {
 	return &Client{
 		BaseURL: baseURL,
 		HTTPClient: &http.Client{
-			Timeout: time.Second * 100000,
+			Timeout: time.Second * 10,
 		},
 		Token: jwtToken,
 	}
-
 }
 
 func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, error) {
@@ -44,7 +43,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	}
 	defer resp.Body.Close()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
