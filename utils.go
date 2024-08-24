@@ -2,6 +2,7 @@ package gopocketbaseclient
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 )
 
@@ -26,8 +27,8 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	return nil
 }
 
-func (c *Client) GetRecord(collection, id string) (*Record, error) {
-	endpoint := "/api/collections/" + collection + "/records/" + id
+func (c *Client) GetRecord(collection, column string, value string) (*Record, error) {
+	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=(%s='%s')", collection, column, value)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
