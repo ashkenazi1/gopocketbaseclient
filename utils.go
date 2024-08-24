@@ -6,10 +6,6 @@ import (
 	"log"
 )
 
-type JSONItems struct {
-	Items json.RawMessage `json:"items"`
-}
-
 func (c *Client) CreateRecord(collection string, record map[string]interface{}) error {
 	endpoint := "/api/collections/" + collection + "/records"
 	respBody, err := c.doRequest("POST", endpoint, record)
@@ -27,20 +23,20 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	return nil
 }
 
-func (c *Client) GetRecord(collection, column string, value string) (*Record, error) {
-	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=(%s='%s')", collection, column, value)
+func (c *Client) GetRecords(collection, column string, value string) (*JSONItems, error) {
+	endpoint := fmt.Sprintf("/api/collections/%s/records/?filter=(%s='%s')", collection, column, value)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var record Record
-	err = json.Unmarshal(respBody, &record)
+	var records JSONItems
+	err = json.Unmarshal(respBody, &records)
 	if err != nil {
 		return nil, err
 	}
 
-	return &record, nil
+	return &records, nil
 }
 
 func (c *Client) UpdateRecord(collection, id string, record map[string]interface{}) error {

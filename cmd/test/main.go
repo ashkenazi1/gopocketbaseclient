@@ -35,6 +35,14 @@ func main() {
 
 	client.CreateRecord("traffic_optimizer", row)
 
+	// Get record/s with filter
+	record, err := client.GetRecords("collention", "column", "value")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(string(record.Items))
+
+	// All records
 	data, err := gopocketbaseclient.All(client, "traffic_optimizer")
 	if err != nil {
 		log.Fatal(err)

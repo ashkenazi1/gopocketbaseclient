@@ -1,6 +1,9 @@
 package gopocketbaseclient
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
+)
 
 type Client struct {
 	BaseURL    string
@@ -19,4 +22,8 @@ type BaseRecord struct {
 type Record struct {
 	BaseRecord
 	Data map[string]interface{} `json:"data"`
+}
+
+type JSONItems struct {
+	Items json.RawMessage `json:"items"`
 }
