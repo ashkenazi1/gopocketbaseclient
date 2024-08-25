@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"strings"
 )
 
@@ -29,9 +30,10 @@ func (c *Client) GetRecords(collection string, filters map[string]string) (*JSON
 	for column, value := range filters {
 		filterParts = append(filterParts, fmt.Sprintf("%s='%s'", column, value))
 	}
-	filterString := strings.Join(filterParts, " AND ")
+	filterString := strings.Join(filterParts, " && ")
+	encodedFilterString := url.QueryEscape(fmt.Sprintf("(%s)", filterString))
 
-	endpoint := fmt.Sprintf("/api/collections/%s/records/?filter=(%s)", collection, filterString)
+	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=%s", collection, encodedFilterString)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
