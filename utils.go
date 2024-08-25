@@ -43,6 +43,10 @@ func (c *Client) GetRecords(collection string, filters map[string]string) (*JSON
 		return nil, err
 	}
 
+	if len(records.Items) == 0 {
+		return nil, fmt.Errorf("no records found")
+	}
+
 	return &records, nil
 }
 
