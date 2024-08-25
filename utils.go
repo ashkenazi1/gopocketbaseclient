@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 )
 
 func (c *Client) CreateRecord(collection string, record map[string]interface{}) error {
@@ -23,8 +24,14 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	return nil
 }
 
-func (c *Client) GetRecords(collection, column string, value string) (*JSONItems, error) {
-	endpoint := fmt.Sprintf("/api/collections/%s/records/?filter=(%s='%s')", collection, column, value)
+func (c *Client) GetRecords(collection string, filters map[string]string) (*JSONItems, error) {
+	var filterParts []string
+	for column, value := range filters {
+		filterParts = append(filterParts, fmt.Sprintf("%s='%s'", column, value))
+	}
+	filterString := strings.Join(filterParts, " AND ")
+
+	endpoint := fmt.Sprintf("/api/collections/%s/records/?filter=(%s)", collection, filterString)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
