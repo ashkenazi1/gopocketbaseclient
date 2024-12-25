@@ -12,14 +12,14 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	endpoint := "/api/collections/" + collection + "/records"
 	respBody, err := c.doRequest("POST", endpoint, record)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create record: %w", err)
 	}
 
 	var createdRecord map[string]interface{}
 	err = json.Unmarshal(respBody, &createdRecord)
 	if err != nil {
-		log.Println("Error unmarshaling response:", err)
-		return err
+		log.Println("Error unmarshaling create record response:", err)
+		return fmt.Errorf("failed to unmarshal create record response: %w", err)
 	}
 
 	return nil
@@ -50,6 +50,22 @@ func (c *Client) GetRecords(collection string, filters map[string]string) (*JSON
 	}
 
 	return &records, nil
+}
+
+func (c *Client) All(collection string) (*JSONItems, error) {
+	endpoint := "/api/collections/" + collection + "/records"
+	respBody, err := c.doRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var data JSONItems
+	err = json.Unmarshal(respBody, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &data, nil
 }
 
 func (c *Client) UpdateRecord(collection, id string, record map[string]interface{}) error {

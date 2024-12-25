@@ -25,13 +25,13 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	if body != nil {
 		reqBody, err = json.Marshal(body)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
 	}
 
 	req, err := http.NewRequest(method, c.BaseURL+endpoint, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -39,18 +39,26 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if err := checkHTTPStatus(resp.StatusCode, respBody); err != nil {
 		return nil, err
 	}
 
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
-	}
-
 	return respBody, nil
+}
+
+// New function to check HTTP status
+func checkHTTPStatus(statusCode int, respBody []byte) error {
+	if statusCode >= 400 {
+		return fmt.Errorf("HTTP %d: %s", statusCode, respBody)
+	}
+	return nil
 }
