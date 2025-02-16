@@ -33,7 +33,7 @@ func (c *Client) GetRecords(collection string, filters map[string]string) (*JSON
 	filterString := strings.Join(filterParts, " && ")
 	encodedFilterString := url.QueryEscape(fmt.Sprintf("(%s)", filterString))
 
-	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=%s", collection, encodedFilterString)
+	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=%s&perPage=10000000", collection, encodedFilterString)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *Client) GetRecords(collection string, filters map[string]string) (*JSON
 }
 
 func (c *Client) All(collection string) (*JSONItems, error) {
-	endpoint := "/api/collections/" + collection + "/records"
+	endpoint := fmt.Sprintf("/api/collections/%s/records?perPage=10000000", collection)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (c *Client) DeleteRecord(collection, id string) error {
 }
 
 func All(c *Client, collection string) (*JSONItems, error) {
-	endpoint := "/api/collections/" + collection + "/records"
+	endpoint := fmt.Sprintf("/api/collections/%s/records?perPage=10000000", collection)
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
