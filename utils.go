@@ -25,10 +25,10 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	return nil
 }
 
-func (c *Client) GetRecords(collection string, filters map[string]string) (*JSONItems, error) {
+func (c *Client) GetRecords(collection string, filters map[string]interface{}) (*JSONItems, error) {
 	var filterParts []string
 	for column, value := range filters {
-		filterParts = append(filterParts, fmt.Sprintf("%s='%s'", column, value))
+		filterParts = append(filterParts, fmt.Sprintf("%s=%v", column, value))
 	}
 	filterString := strings.Join(filterParts, " && ")
 	encodedFilterString := url.QueryEscape(fmt.Sprintf("(%s)", filterString))
