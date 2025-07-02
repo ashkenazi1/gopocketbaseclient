@@ -235,8 +235,6 @@ func isArrayOfPocketBaseIDs(arr []interface{}) bool {
 	return true
 }
 
-// Removed automatic relationship detection functions as they relied on unreliable pattern matching
-
 // GetRecordsWithExpand fetches records with explicit relationship expansion
 func (c *Client) GetRecordsWithExpand(collection string, filters map[string]string, expandFields []string) (*JSONItems, error) {
 	// Build filter string
@@ -310,14 +308,42 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	return nil
 }
 
-func (c *Client) GetRecords(collection string, filters map[string]string) (*JSONItems, error) {
+// formatFilterValue properly formats a value for PocketBase filter queries
+func formatFilterValue(value interface{}) string {
+	if value == nil {
+		return "null"
+	}
+
+	switch v := value.(type) {
+	case string:
+		// Escape single quotes and wrap in single quotes
+		escaped := strings.ReplaceAll(v, "'", "\\'")
+		return fmt.Sprintf("'%s'", escaped)
+	case bool:
+		return fmt.Sprintf("%t", v)
+	case int, int8, int16, int32, int64:
+		return fmt.Sprintf("%d", v)
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", v)
+	case float32, float64:
+		return fmt.Sprintf("%g", v)
+	default:
+		// For other types, convert to string and treat as string
+		str := fmt.Sprintf("%v", v)
+		escaped := strings.ReplaceAll(str, "'", "\\'")
+		return fmt.Sprintf("'%s'", escaped)
+	}
+}
+
+func (c *Client) GetRecords(collection string, filters map[string]interface{}) (*JSONItems, error) {
 	if collection == "" {
 		return nil, fmt.Errorf("collection name cannot be empty")
 	}
 
 	var filterParts []string
 	for column, value := range filters {
-		filterParts = append(filterParts, fmt.Sprintf("%s='%s'", column, value))
+		formattedValue := formatFilterValue(value)
+		filterParts = append(filterParts, fmt.Sprintf("%s=%s", column, formattedValue))
 	}
 	filterString := strings.Join(filterParts, " && ")
 	encodedFilterString := url.QueryEscape(fmt.Sprintf("(%s)", filterString))

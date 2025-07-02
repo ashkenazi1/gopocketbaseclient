@@ -59,7 +59,7 @@ func main() {
 
 	// Example 3: Query records with filters
 	fmt.Println("\n3. Querying with filters:")
-	filters := map[string]string{
+	filters := map[string]interface{}{
 		"status": "active",
 	}
 
@@ -72,7 +72,7 @@ func main() {
 
 	// Example 4: Basic querying (removed auto-expand feature)
 	fmt.Println("\n4. Basic querying:")
-	basicRecords, err := client.GetRecords("tasks", map[string]string{
+	basicRecords, err := client.GetRecords("tasks", map[string]interface{}{
 		"status": "active",
 	})
 	if err != nil {
