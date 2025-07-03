@@ -59,18 +59,25 @@ func (c *Client) Register(req RegisterRequest) (*AuthResponse, error) {
 		return nil, fmt.Errorf("password and password confirmation do not match")
 	}
 
+	// Create user record first
 	respBody, err := c.doRequest("POST", "/api/collections/users/records", req)
 	if err != nil {
 		return nil, fmt.Errorf("registration failed: %w", err)
 	}
 
-	var authResponse AuthResponse
-	err = json.Unmarshal(respBody, &authResponse)
+	var user User
+	err = json.Unmarshal(respBody, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse registration response: %w", err)
 	}
 
-	return &authResponse, nil
+	// Now authenticate the user to get the token
+	authResp, err := c.Login(req.Email, req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to authenticate after registration: %w", err)
+	}
+
+	return authResp, nil
 }
 
 // RefreshAuth refreshes the authentication token
@@ -94,20 +101,22 @@ func (c *Client) RefreshAuth() (*AuthResponse, error) {
 
 // Logout invalidates the current authentication token
 func (c *Client) Logout() error {
-	_, err := c.doRequest("POST", "/api/collections/users/auth-logout", nil)
-	if err != nil {
-		return fmt.Errorf("logout failed: %w", err)
-	}
-
-	// Clear client token
+	// Clear client token (logout is primarily client-side)
 	c.Token = ""
 
+	// PocketBase doesn't have a server-side logout endpoint in all versions
+	// Token invalidation is handled by clearing the client token
 	return nil
 }
 
 // GetCurrentUser returns the current authenticated user
 func (c *Client) GetCurrentUser() (*User, error) {
-	respBody, err := c.doRequest("GET", "/api/collections/users/auth-refresh", nil)
+	if c.Token == "" {
+		return nil, fmt.Errorf("no authentication token available")
+	}
+
+	// Use auth-refresh to get current user info
+	respBody, err := c.doRequest("POST", "/api/collections/users/auth-refresh", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current user: %w", err)
 	}
@@ -164,6 +173,31 @@ func (c *Client) SetAuthToken(token string) {
 // GetAuthToken returns the current authentication token
 func (c *Client) GetAuthToken() string {
 	return c.Token
+}
+
+// CheckAuthConfig checks if the PocketBase instance is properly configured for authentication
+func (c *Client) CheckAuthConfig() error {
+	// Try to get the users collection info
+	respBody, err := c.doRequest("GET", "/api/collections/users", nil)
+	if err != nil {
+		return fmt.Errorf("failed to check users collection config: %w", err)
+	}
+
+	// Parse the response to check if auth is enabled
+	var collection map[string]interface{}
+	err = json.Unmarshal(respBody, &collection)
+	if err != nil {
+		return fmt.Errorf("failed to parse collection config: %w", err)
+	}
+
+	// Check if the collection has auth enabled
+	if options, ok := collection["options"].(map[string]interface{}); ok {
+		if allowPasswordAuth, exists := options["allowPasswordAuth"].(bool); exists && !allowPasswordAuth {
+			return fmt.Errorf("users collection is not configured to allow password authentication")
+		}
+	}
+
+	return nil
 }
 
 // GetUser gets a user by ID (requires admin token or same user)
