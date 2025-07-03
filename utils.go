@@ -71,13 +71,48 @@ func (c *Client) Register(req RegisterRequest) (*AuthResponse, error) {
 		return nil, fmt.Errorf("failed to parse registration response: %w", err)
 	}
 
-	// Now authenticate the user to get the token
+	// Try to authenticate the user to get the token (optional)
 	authResp, err := c.Login(req.Email, req.Password)
 	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate after registration: %w", err)
+		// If authentication fails, still return success with the user data
+		// but no token (user was created successfully)
+		return &AuthResponse{
+			Token:  "",
+			Record: user,
+		}, nil
 	}
 
 	return authResp, nil
+}
+
+// CreateUser creates a new user account without authentication
+func (c *Client) CreateUser(req RegisterRequest) (*User, error) {
+	if req.Username == "" {
+		return nil, fmt.Errorf("username cannot be empty")
+	}
+	if req.Email == "" {
+		return nil, fmt.Errorf("email cannot be empty")
+	}
+	if req.Password == "" {
+		return nil, fmt.Errorf("password cannot be empty")
+	}
+	if req.Password != req.PasswordConfirm {
+		return nil, fmt.Errorf("password and password confirmation do not match")
+	}
+
+	// Create user record only
+	respBody, err := c.doRequest("POST", "/api/collections/users/records", req)
+	if err != nil {
+		return nil, fmt.Errorf("user creation failed: %w", err)
+	}
+
+	var user User
+	err = json.Unmarshal(respBody, &user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse user creation response: %w", err)
+	}
+
+	return &user, nil
 }
 
 // RefreshAuth refreshes the authentication token

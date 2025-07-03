@@ -2,27 +2,33 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ashkenazi1/gopocketbaseclient"
 )
 
 func main() {
 	// Replace with your actual PocketBase URL and admin JWT token
-	PocketBaseURL := "https://your-pocketbase-instance.com"
-	PocketBaseAdminJWT := "your-admin-jwt-token-here"
+	PocketBaseURL := "https://your-destination-pocketbase.com"
+	PocketBaseAdminJWT := "your-admin-jwt-token"
 
 	fmt.Println("=== PocketBase Authentication Demo ===")
 	fmt.Println("🔑 Using admin JWT for API access")
 	fmt.Println("⚠️  Remember to replace the URL and JWT token with your actual values!")
+	fmt.Println("ℹ️  Note: Some operations require user tokens, not admin tokens")
 
 	// Initialize client with admin JWT
 	client := gopocketbaseclient.NewClient(PocketBaseURL, PocketBaseAdminJWT)
 
 	// Example 1: User Registration
 	fmt.Println("\n1. User Registration:")
+
+	// Use timestamp to create unique user for each test run
+	timestamp := time.Now().Unix()
+
 	registerReq := gopocketbaseclient.RegisterRequest{
-		Username:        "demo_user",
-		Email:           "demo@example.com",
+		Username:        fmt.Sprintf("demo_user_%d", timestamp),
+		Email:           fmt.Sprintf("demo%d@example.com", timestamp),
 		Password:        "securepassword123",
 		PasswordConfirm: "securepassword123",
 		Name:            "Demo User",
@@ -32,13 +38,20 @@ func main() {
 	if err != nil {
 		fmt.Printf("Registration failed: %v\n", err)
 	} else {
-		fmt.Printf("✓ User registered: %s\n", authResp.Record.Username)
-		fmt.Printf("  Token: %s...\n", authResp.Token[:20])
+		fmt.Printf("✓ User registered successfully!\n")
+		fmt.Printf("  Name: %s\n", authResp.Record.Name)
+		fmt.Printf("  Email: %s\n", authResp.Record.Email)
+		fmt.Printf("  ID: %s\n", authResp.Record.ID)
+		if authResp.Token != "" {
+			fmt.Printf("  Token: %s...\n", authResp.Token[:20])
+		} else {
+			fmt.Println("  Token: (not provided - collection may not be configured for authentication)")
+		}
 	}
 
 	// Example 2: User Login
 	fmt.Println("\n2. User Login:")
-	authResp, err = client.Login("demo@example.com", "securepassword123")
+	authResp, err = client.Login(fmt.Sprintf("demo%d@example.com", timestamp), "securepassword123")
 	if err != nil {
 		fmt.Printf("Login failed: %v\n", err)
 		fmt.Println("💡 If you get 'not configured to allow password authentication', go to your PocketBase admin panel:")
@@ -88,7 +101,7 @@ func main() {
 
 	// Example 6: Password Reset Request
 	fmt.Println("\n6. Password Reset Request:")
-	err = client.RequestPasswordReset("demo@example.com")
+	err = client.RequestPasswordReset(fmt.Sprintf("demo%d@example.com", timestamp))
 	if err != nil {
 		fmt.Printf("Password reset request failed: %v\n", err)
 		fmt.Println("💡 Password reset also requires the users collection to be configured for password authentication")
