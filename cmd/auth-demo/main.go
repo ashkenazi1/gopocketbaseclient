@@ -7,10 +7,16 @@ import (
 )
 
 func main() {
-	fmt.Println("=== PocketBase Authentication Demo ===")
+	// Replace with your actual PocketBase URL and admin JWT token
+	PocketBaseURL := "https://your-pocketbase-instance.com"
+	PocketBaseAdminJWT := "your-admin-jwt-token-here"
 
-	// Initialize client (no token needed for registration/login)
-	client := gopocketbaseclient.NewClient("https://your-pocketbase.com", "")
+	fmt.Println("=== PocketBase Authentication Demo ===")
+	fmt.Println("🔑 Using admin JWT for API access")
+	fmt.Println("⚠️  Remember to replace the URL and JWT token with your actual values!")
+
+	// Initialize client with admin JWT
+	client := gopocketbaseclient.NewClient(PocketBaseURL, PocketBaseAdminJWT)
 
 	// Example 1: User Registration
 	fmt.Println("\n1. User Registration:")
@@ -35,6 +41,11 @@ func main() {
 	authResp, err = client.Login("demo@example.com", "securepassword123")
 	if err != nil {
 		fmt.Printf("Login failed: %v\n", err)
+		fmt.Println("💡 If you get 'not configured to allow password authentication', go to your PocketBase admin panel:")
+		fmt.Println("   1. Go to Settings > Collections > users")
+		fmt.Println("   2. Enable 'Auth' options")
+		fmt.Println("   3. Set 'Auth with password' to enabled")
+		fmt.Println("   4. Save the collection")
 	} else {
 		fmt.Printf("✓ Login successful: %s\n", authResp.Record.Username)
 		fmt.Printf("  Email: %s\n", authResp.Record.Email)
@@ -80,6 +91,7 @@ func main() {
 	err = client.RequestPasswordReset("demo@example.com")
 	if err != nil {
 		fmt.Printf("Password reset request failed: %v\n", err)
+		fmt.Println("💡 Password reset also requires the users collection to be configured for password authentication")
 	} else {
 		fmt.Println("✓ Password reset email sent")
 	}
@@ -87,7 +99,14 @@ func main() {
 	// Example 7: Session Management
 	fmt.Println("\n7. Session Management:")
 	fmt.Printf("Is authenticated: %v\n", client.IsAuthenticated())
-	fmt.Printf("Current token: %s...\n", client.GetAuthToken()[:20])
+	token := client.GetAuthToken()
+	if len(token) > 20 {
+		fmt.Printf("Current token: %s...\n", token[:20])
+	} else if len(token) > 0 {
+		fmt.Printf("Current token: %s\n", token)
+	} else {
+		fmt.Println("Current token: (empty)")
+	}
 
 	// Example 8: Logout
 	fmt.Println("\n8. Logout:")
@@ -107,5 +126,12 @@ func main() {
 	fmt.Println("  • Token refresh")
 	fmt.Println("  • Password reset flow")
 	fmt.Println("  • Secure logout")
-	fmt.Println("\nUpdate the URL to test with real data.")
+	fmt.Println("\n🛠️  To fix authentication issues:")
+	fmt.Println("  1. Update the PocketBaseURL to your actual PocketBase instance")
+	fmt.Println("  2. Add your admin JWT token")
+	fmt.Println("  3. In PocketBase admin panel, go to Settings > Collections")
+	fmt.Println("  4. Create or configure a 'users' collection with Auth enabled")
+	fmt.Println("  5. Enable 'Auth with password' in the collection settings")
+	fmt.Println("  6. Make sure required fields (username, email) are properly configured")
+	fmt.Println("\n📚 For more info: https://pocketbase.io/docs/authentication/")
 }
