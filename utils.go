@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Compiled regex for better performance
@@ -831,4 +832,293 @@ func (c *Client) BulkUpsert(collection string, records []UpsertRecord) (*BulkOpe
 	}
 
 	return bulkResult, nil
+}
+
+// Migration functions
+
+// MigrateCollection migrates all records from the current PocketBase collection to another PocketBase instance
+func (c *Client) MigrateCollection(config MigrationConfig) (*MigrationResult, error) {
+	startTime := time.Now()
+
+	// Validate configuration
+	if err := validateMigrationConfig(config); err != nil {
+		return nil, fmt.Errorf("invalid migration config: %w", err)
+	}
+
+	// Set default batch size if not specified
+	if config.BatchSize <= 0 {
+		config.BatchSize = 50
+	}
+
+	// Create destination client
+	destClient := NewClient(config.DestinationURL, config.DestinationJWT)
+
+	// Test destination connection
+	if err := testDestinationConnection(destClient, config.CollectionName); err != nil {
+		return nil, fmt.Errorf("destination connection failed: %w", err)
+	}
+
+	// Get all records from source collection
+	sourceRecords, err := c.getAllRecordsForMigration(config.CollectionName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch source records: %w", err)
+	}
+
+	if len(sourceRecords) == 0 {
+		return &MigrationResult{
+			SourceCollection:      config.CollectionName,
+			DestinationCollection: config.CollectionName,
+			TotalRecords:          0,
+			SuccessfulRecords:     0,
+			FailedRecords:         0,
+			SkippedRecords:        0,
+			ProcessingTime:        time.Since(startTime).String(),
+			Errors:                []MigrationError{},
+			Summary:               "No records found in source collection",
+		}, nil
+	}
+
+	// Migrate records in batches
+	result, err := c.migrateRecordsBatch(destClient, sourceRecords, config)
+	if err != nil {
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+
+	// Update result with timing and summary
+	result.ProcessingTime = time.Since(startTime).String()
+	result.SourceCollection = config.CollectionName
+	result.DestinationCollection = config.CollectionName
+	result.Summary = fmt.Sprintf("Migration completed: %d/%d records successfully migrated",
+		result.SuccessfulRecords, result.TotalRecords)
+
+	return result, nil
+}
+
+// validateMigrationConfig validates the migration configuration
+func validateMigrationConfig(config MigrationConfig) error {
+	if config.DestinationURL == "" {
+		return fmt.Errorf("destination URL cannot be empty")
+	}
+	if config.DestinationJWT == "" {
+		return fmt.Errorf("destination JWT cannot be empty")
+	}
+	if config.CollectionName == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
+	if config.BatchSize < 0 {
+		return fmt.Errorf("batch size cannot be negative")
+	}
+	return nil
+}
+
+// testDestinationConnection tests if the destination PocketBase is accessible and the collection exists
+func testDestinationConnection(destClient *Client, collectionName string) error {
+	// Try to get records from the destination collection to verify it exists
+	_, err := destClient.All(collectionName)
+	if err != nil {
+		return fmt.Errorf("cannot access destination collection '%s': %w", collectionName, err)
+	}
+	return nil
+}
+
+// getAllRecordsForMigration fetches all records from the source collection
+func (c *Client) getAllRecordsForMigration(collection string) ([]MigrationRecord, error) {
+	// Get all records from the collection
+	jsonItems, err := c.All(collection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch records: %w", err)
+	}
+
+	// Parse the JSON items
+	var records []map[string]interface{}
+	if err := json.Unmarshal(jsonItems.Items, &records); err != nil {
+		return nil, fmt.Errorf("failed to parse records: %w", err)
+	}
+
+	// Convert to migration records
+	migrationRecords := make([]MigrationRecord, 0, len(records))
+	for _, record := range records {
+		migRecord := MigrationRecord{
+			Data: make(map[string]interface{}),
+		}
+
+		// Extract special fields
+		if id, exists := record["id"]; exists {
+			migRecord.SourceID = fmt.Sprintf("%v", id)
+		}
+		if created, exists := record["created"]; exists {
+			migRecord.Created = fmt.Sprintf("%v", created)
+		}
+		if updated, exists := record["updated"]; exists {
+			migRecord.Updated = fmt.Sprintf("%v", updated)
+		}
+
+		// Copy all data fields except system fields
+		for key, value := range record {
+			if !isSystemField(key) {
+				migRecord.Data[key] = value
+			}
+		}
+
+		migrationRecords = append(migrationRecords, migRecord)
+	}
+
+	return migrationRecords, nil
+}
+
+// isSystemField checks if a field is a system field that shouldn't be migrated
+func isSystemField(fieldName string) bool {
+	systemFields := []string{"id", "created", "updated", "collectionId", "collectionName"}
+	for _, field := range systemFields {
+		if fieldName == field {
+			return true
+		}
+	}
+	return false
+}
+
+// migrateRecordsBatch migrates records in batches to the destination
+func (c *Client) migrateRecordsBatch(destClient *Client, records []MigrationRecord, config MigrationConfig) (*MigrationResult, error) {
+	result := &MigrationResult{
+		TotalRecords:      len(records),
+		SuccessfulRecords: 0,
+		FailedRecords:     0,
+		SkippedRecords:    0,
+		Errors:            []MigrationError{},
+	}
+
+	// Process records in batches
+	for i := 0; i < len(records); i += config.BatchSize {
+		end := i + config.BatchSize
+		if end > len(records) {
+			end = len(records)
+		}
+
+		batch := records[i:end]
+		batchResult, err := c.migrateBatch(destClient, batch, config, i)
+		if err != nil {
+			return nil, fmt.Errorf("batch migration failed: %w", err)
+		}
+
+		// Aggregate results
+		result.SuccessfulRecords += batchResult.SuccessfulRecords
+		result.FailedRecords += batchResult.FailedRecords
+		result.SkippedRecords += batchResult.SkippedRecords
+		result.Errors = append(result.Errors, batchResult.Errors...)
+	}
+
+	return result, nil
+}
+
+// migrateBatch migrates a single batch of records
+func (c *Client) migrateBatch(destClient *Client, batch []MigrationRecord, config MigrationConfig, startIndex int) (*MigrationResult, error) {
+	result := &MigrationResult{
+		SuccessfulRecords: 0,
+		FailedRecords:     0,
+		SkippedRecords:    0,
+		Errors:            []MigrationError{},
+	}
+
+	for i, record := range batch {
+		recordIndex := startIndex + i
+
+		// Check if record already exists if skip_existing is enabled
+		if config.SkipExisting {
+			exists, err := c.recordExistsInDestination(destClient, config.CollectionName, record)
+			if err != nil {
+				result.Errors = append(result.Errors, MigrationError{
+					RecordID:    record.SourceID,
+					RecordIndex: recordIndex,
+					Operation:   "existence_check",
+					Error:       err.Error(),
+				})
+				result.FailedRecords++
+				continue
+			}
+			if exists {
+				result.SkippedRecords++
+				continue
+			}
+		}
+
+		// Create record in destination
+		err := destClient.CreateRecord(config.CollectionName, record.Data)
+		if err != nil {
+			result.Errors = append(result.Errors, MigrationError{
+				RecordID:    record.SourceID,
+				RecordIndex: recordIndex,
+				Operation:   "create",
+				Error:       err.Error(),
+			})
+			result.FailedRecords++
+		} else {
+			result.SuccessfulRecords++
+		}
+	}
+
+	return result, nil
+}
+
+// recordExistsInDestination checks if a record with similar data already exists in the destination
+func (c *Client) recordExistsInDestination(destClient *Client, collectionName string, record MigrationRecord) (bool, error) {
+	// This is a simple implementation that checks for exact data matches
+	// In a real-world scenario, you might want to implement more sophisticated matching logic
+
+	// Get all records from destination and compare
+	jsonItems, err := destClient.All(collectionName)
+	if err != nil {
+		return false, err
+	}
+
+	var destRecords []map[string]interface{}
+	if err := json.Unmarshal(jsonItems.Items, &destRecords); err != nil {
+		return false, err
+	}
+
+	// Simple comparison - check if any record has the same data
+	for _, destRecord := range destRecords {
+		if recordsMatch(record.Data, destRecord) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// recordsMatch compares two records to see if they match (for duplicate detection)
+func recordsMatch(record1 map[string]interface{}, record2 map[string]interface{}) bool {
+	// Simple field-by-field comparison excluding system fields
+	for key, value1 := range record1 {
+		if isSystemField(key) {
+			continue
+		}
+
+		value2, exists := record2[key]
+		if !exists {
+			return false
+		}
+
+		// Convert both values to strings for comparison
+		str1 := fmt.Sprintf("%v", value1)
+		str2 := fmt.Sprintf("%v", value2)
+
+		if str1 != str2 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// QuickMigrate provides a simple way to migrate a collection with default settings
+func (c *Client) QuickMigrate(destinationURL, destinationJWT, collectionName string) (*MigrationResult, error) {
+	config := MigrationConfig{
+		DestinationURL: destinationURL,
+		DestinationJWT: destinationJWT,
+		CollectionName: collectionName,
+		SkipExisting:   true,
+		BatchSize:      50,
+	}
+
+	return c.MigrateCollection(config)
 }

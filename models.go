@@ -266,3 +266,43 @@ func isTimeString(s string) bool {
 		s[13] == ':' && s[16] == ':' &&
 		strings.HasSuffix(s, "Z"))
 }
+
+// Migration types
+
+// MigrationConfig holds configuration for migrating data between PocketBase instances
+type MigrationConfig struct {
+	DestinationURL string `json:"destination_url"` // URL of the destination PocketBase
+	DestinationJWT string `json:"destination_jwt"` // JWT token for destination PocketBase
+	CollectionName string `json:"collection_name"` // Name of collection to migrate
+	SkipExisting   bool   `json:"skip_existing"`   // Whether to skip records that already exist
+	BatchSize      int    `json:"batch_size"`      // Number of records to process in each batch
+}
+
+// MigrationResult contains results from a migration operation
+type MigrationResult struct {
+	SourceCollection      string           `json:"source_collection"`
+	DestinationCollection string           `json:"destination_collection"`
+	TotalRecords          int              `json:"total_records"`
+	SuccessfulRecords     int              `json:"successful_records"`
+	FailedRecords         int              `json:"failed_records"`
+	SkippedRecords        int              `json:"skipped_records"`
+	ProcessingTime        string           `json:"processing_time"`
+	Errors                []MigrationError `json:"errors"`
+	Summary               string           `json:"summary"`
+}
+
+// MigrationError represents an error that occurred during migration
+type MigrationError struct {
+	RecordID    string `json:"record_id"`
+	RecordIndex int    `json:"record_index"`
+	Operation   string `json:"operation"`
+	Error       string `json:"error"`
+}
+
+// MigrationRecord represents a record during migration process
+type MigrationRecord struct {
+	SourceID string                 `json:"source_id"`
+	Data     map[string]interface{} `json:"data"`
+	Created  string                 `json:"created"`
+	Updated  string                 `json:"updated"`
+}

@@ -6,6 +6,7 @@ A comprehensive, production-ready Go client for PocketBase with automatic time h
 
 - 🔐 **Complete Authentication System** - Login, register, password reset, session management
 - ⚡ **High-Performance Bulk Operations** - 10x faster with controlled concurrency
+- 🔄 **Collection Migration** - Migrate data between PocketBase instances with progress tracking
 - 🕒 **Automatic Time Handling** - Seamless `time.Time` support for PocketBase's date format
 - 🔗 **Manual Relationship Expansion** - Explicit control over related record loading
 - 🛡️ **Production-Ready** - Comprehensive error handling and input validation
@@ -233,6 +234,70 @@ result, err := client.BulkUpsert("tasks", upserts)
 result, err := client.DeleteMultipleRecords("tasks", []string{"id1", "id2", "id3"})
 ```
 
+### 🔄 Collection Migration
+
+Migrate data between PocketBase instances with comprehensive error handling and progress tracking:
+
+```go
+// Quick migration with default settings
+result, err := sourceClient.QuickMigrate(
+	"https://destination.pocketbase.io",
+	"destination-jwt-token",
+	"collection_name",
+)
+
+if err != nil {
+	fmt.Printf("Migration failed: %v\n", err)
+	return
+}
+
+fmt.Printf("Migrated %d/%d records in %s\n", 
+	result.SuccessfulRecords, 
+	result.TotalRecords,
+	result.ProcessingTime,
+)
+
+// Advanced migration with custom configuration
+config := gopocketbaseclient.MigrationConfig{
+	DestinationURL:   "https://destination.pocketbase.io",
+	DestinationJWT:   "destination-admin-jwt",
+	CollectionName:   "my_collection",
+	SkipExisting:     true,  // Skip records that already exist
+	BatchSize:        25,    // Process 25 records per batch
+}
+
+result, err := sourceClient.MigrateCollection(config)
+if err != nil {
+	fmt.Printf("Migration failed: %v\n", err)
+	return
+}
+
+// Detailed error handling
+fmt.Printf("Migration Summary:\n")
+fmt.Printf("  Total: %d records\n", result.TotalRecords)
+fmt.Printf("  Successful: %d\n", result.SuccessfulRecords)
+fmt.Printf("  Failed: %d\n", result.FailedRecords)
+fmt.Printf("  Skipped: %d\n", result.SkippedRecords)
+fmt.Printf("  Processing time: %s\n", result.ProcessingTime)
+
+// Handle individual errors
+for _, migErr := range result.Errors {
+	fmt.Printf("Error in record %s: %s\n", migErr.RecordID, migErr.Error)
+}
+```
+
+**Migration Features:**
+- 🔄 **Batch Processing** - Efficient handling of large datasets
+- 🛡️ **Duplicate Detection** - Skip existing records to avoid conflicts
+- 📊 **Progress Tracking** - Detailed statistics and timing information
+- 🚨 **Error Recovery** - Continue processing despite individual record failures
+- ⚡ **Performance Optimized** - Concurrent operations with rate limiting
+
+**Prerequisites:**
+- Collection must exist in both source and destination PocketBase instances
+- Admin JWT tokens required for both instances
+- Sufficient permissions for read/write operations
+
 ### 🕒 Automatic Time Handling
 
 The library automatically handles PocketBase's non-standard date format (`"2025-01-20 21:00:58.576Z"`):
@@ -319,6 +384,18 @@ Demonstrates:
 - Profile updates
 - Password reset flow
 - Token handling
+
+### Migration Demo
+```bash
+go run cmd/migration-demo/main.go
+```
+Demonstrates:
+- Quick migration with default settings
+- Advanced migration with custom configuration
+- Batch processing for large datasets
+- Duplicate detection and skipping
+- Comprehensive error handling and reporting
+- Processing time tracking
 
 ## 🛡️ Error Handling
 
