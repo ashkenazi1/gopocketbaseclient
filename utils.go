@@ -211,29 +211,36 @@ func (c *Client) GetAuthToken() string {
 	return c.Token
 }
 
-// CheckAuthConfig checks if the PocketBase instance is properly configured for authentication
-func (c *Client) CheckAuthConfig() error {
-	// Try to get the users collection info
-	respBody, err := c.doRequest("GET", "/api/collections/users", nil)
+// ValidateJWT validates a JWT token by making a request to PocketBase
+// This is a package-level function that can be used in applications to verify client tokens
+// Since we don't have access to the JWT secret, we validate by attempting to get user info
+// Creates a completely separate client instance to avoid affecting the original client's token
+func ValidateJWT(c *Client, token string) (*JWTValidationResponse, error) {
+	if token == "" {
+		return &JWTValidationResponse{
+			Valid: false,
+			Error: "token cannot be empty",
+		}, fmt.Errorf("token cannot be empty")
+	}
+
+	// Create a completely separate client instance for validation
+	// This ensures we don't interfere with the original client's admin token
+	validationClient := NewClient(c.BaseURL, token)
+
+	// Try to get current user info to validate the token
+	user, err := validationClient.GetCurrentUser()
 	if err != nil {
-		return fmt.Errorf("failed to check users collection config: %w", err)
+		return &JWTValidationResponse{
+			Valid: false,
+			Error: fmt.Sprintf("token validation failed: %v", err),
+		}, nil // Don't return error here, validation failed but function succeeded
 	}
 
-	// Parse the response to check if auth is enabled
-	var collection map[string]interface{}
-	err = json.Unmarshal(respBody, &collection)
-	if err != nil {
-		return fmt.Errorf("failed to parse collection config: %w", err)
-	}
-
-	// Check if the collection has auth enabled
-	if options, ok := collection["options"].(map[string]interface{}); ok {
-		if allowPasswordAuth, exists := options["allowPasswordAuth"].(bool); exists && !allowPasswordAuth {
-			return fmt.Errorf("users collection is not configured to allow password authentication")
-		}
-	}
-
-	return nil
+	return &JWTValidationResponse{
+		Valid:  true,
+		UserID: user.ID,
+		Email:  user.Email,
+	}, nil
 }
 
 // GetUser gets a user by ID (requires admin token or same user)

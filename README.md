@@ -5,6 +5,7 @@ A comprehensive, production-ready Go client for PocketBase with automatic time h
 ## ✨ Features
 
 - 🔐 **Complete Authentication System** - Login, register, password reset, session management
+- 🔍 **JWT Token Validation** - Validate user JWT tokens from API requests without JWT secrets
 - ⚡ **High-Performance Bulk Operations** - 10x faster with controlled concurrency
 - 🔄 **Collection Migration** - Migrate data between PocketBase instances with progress tracking
 - 🕒 **Automatic Time Handling** - Seamless `time.Time` support for PocketBase's date format
@@ -156,6 +157,18 @@ client.SetAuthToken("your-token")
 token := client.GetAuthToken()
 isAuth := client.IsAuthenticated()
 
+// JWT Token validation (validate user tokens from API requests)
+response, err := gopocketbaseclient.ValidateJWT(client, userProvidedToken)
+if err != nil {
+	fmt.Printf("Validation error: %v\n", err)
+}
+
+if response.Valid {
+	fmt.Printf("Valid token for user: %s (%s)\n", response.UserID, response.Email)
+} else {
+	fmt.Printf("Invalid token: %s\n", response.Error)
+}
+
 // Password reset
 err = client.RequestPasswordReset("email@example.com")
 err = client.ConfirmPasswordReset("reset-token", "new-password", "new-password")
@@ -164,6 +177,63 @@ err = client.ConfirmPasswordReset("reset-token", "new-password", "new-password")
 authResp, err := client.RefreshAuth()
 err = client.Logout()
 ```
+
+### 🔍 JWT Token Validation
+
+Perfect for API servers that need to validate user JWT tokens from client requests without having access to PocketBase's JWT secret:
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"github.com/ashkenazi1/gopocketbaseclient"
+)
+
+func main() {
+	// Initialize admin client (with admin privileges)
+	adminClient := gopocketbaseclient.NewClient("https://your-pocketbase.com", "admin-jwt-token")
+
+	http.HandleFunc("/protected", func(w http.ResponseWriter, r *http.Request) {
+		// Extract JWT token from Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, "Missing or invalid authorization header", http.StatusUnauthorized)
+			return
+		}
+		
+		userToken := strings.TrimPrefix(authHeader, "Bearer ")
+		
+		// Validate the user's JWT token
+		validation, err := gopocketbaseclient.ValidateJWT(adminClient, userToken)
+		if err != nil {
+			http.Error(w, "Token validation failed", http.StatusInternalServerError)
+			return
+		}
+		
+		if !validation.Valid {
+			http.Error(w, fmt.Sprintf("Invalid token: %s", validation.Error), http.StatusUnauthorized)
+			return
+		}
+		
+		// Token is valid - proceed with the request
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"message": "Access granted", "user_id": "%s", "email": "%s"}`, 
+			validation.UserID, validation.Email)
+	})
+
+	fmt.Println("Server running on :8080")
+	http.ListenAndServe(":8080", nil)
+}
+```
+
+**Key Benefits:**
+- ✅ No need to know PocketBase's JWT secret
+- ✅ Admin client remains unaffected by token validation
+- ✅ Works by making validation requests to PocketBase
+- ✅ Returns user information for valid tokens
 
 ### 📊 CRUD Operations
 
