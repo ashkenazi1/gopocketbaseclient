@@ -84,7 +84,7 @@ func main() {
 	// Example 5: Manual relationship expansion
 	fmt.Println("\n5. Manual relationship expansion:")
 	expandFields := []string{"project_id", "assignee_id"}
-	_, err = client.GetRecordsWithExpand("tasks", map[string]string{
+	_, err = client.GetRecordsWithExpand("tasks", map[string]interface{}{
 		"status": "active",
 	}, expandFields)
 	if err != nil {

@@ -245,7 +245,7 @@ err := client.CreateRecord("collection", map[string]interface{}{
 })
 
 // Get records with filters
-records, err := client.GetRecords("collection", map[string]string{
+records, err := client.GetRecords("collection", map[string]interface{}{
 	"status": "active",
 	"priority": "high",
 })
@@ -267,7 +267,7 @@ err := client.DeleteRecord("collection", "record-id")
 ```go
 // Manual relationship expansion
 expandedRecords, err := client.GetRecordsWithExpand("tasks", 
-	map[string]string{"status": "active"}, 
+	map[string]interface{}{"status": "active"}, 
 	[]string{"project_id", "assignee_id"})
 ```
 

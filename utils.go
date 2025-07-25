@@ -313,11 +313,12 @@ func isArrayOfPocketBaseIDs(arr []interface{}) bool {
 }
 
 // GetRecordsWithExpand fetches records with explicit relationship expansion
-func (c *Client) GetRecordsWithExpand(collection string, filters map[string]string, expandFields []string) (*JSONItems, error) {
+func (c *Client) GetRecordsWithExpand(collection string, filters map[string]interface{}, expandFields []string) (*JSONItems, error) {
 	// Build filter string
 	var filterParts []string
 	for column, value := range filters {
-		filterParts = append(filterParts, fmt.Sprintf("%s='%s'", column, value))
+		formattedValue := formatFilterValue(value)
+		filterParts = append(filterParts, fmt.Sprintf("%s=%s", column, formattedValue))
 	}
 
 	// Build base endpoint
