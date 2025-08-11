@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// Replace with your actual PocketBase URL and admin JWT token
-	PocketBaseURL := "https://your-destination-pocketbase.com"
+	PocketBaseURL := "https://your-pocketbase.com"
 	PocketBaseAdminJWT := "your-admin-jwt-token"
 
 	fmt.Println("=== PocketBase Authentication Demo ===")

@@ -2,19 +2,21 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/ashkenazi1/gopocketbaseclient"
 )
 
 func main() {
-	sourceURL := ""
-	sourceJWT := ""
+	fmt.Println("=== Simple Migration Test ===")
+	fmt.Println("This test will help verify migration functionality")
 
-	destinationURL := ""
-	destinationJWT := ""
+	sourceURL := "https://your-source-pocketbase.com"
+	sourceJWT := "your-source-admin-jwt-token"
 
-	collectionName := ""
+	destinationURL := "https://your-destination-pocketbase.com"
+	destinationJWT := "your-destination-admin-jwt-token"
+
+	collectionName := "traffic_optimizer"
 
 	fmt.Printf("🔗 Source: %s\n", sourceURL)
 	fmt.Printf("🎯 Destination: %s\n", destinationURL)
@@ -42,6 +44,7 @@ func main() {
 
 	fmt.Println("🚀 Starting migration...")
 
+	// Now attempt the migration with proper error handling
 	config := gopocketbaseclient.MigrationConfig{
 		DestinationURL: destinationURL,
 		DestinationJWT: destinationJWT,
@@ -56,6 +59,7 @@ func main() {
 		return
 	}
 
+	// Print detailed results
 	fmt.Println("✅ Migration completed successfully!")
 	fmt.Printf("📊 Summary: %s\n", result.Summary)
 	fmt.Printf("📈 Records: %d total, %d successful, %d failed, %d skipped\n",
