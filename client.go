@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// Version information
+const (
+	Version = "1.4.2"
+	Name    = "Go PocketBase Client"
+)
+
 func NewClient(baseURL, jwtToken string) *Client {
 	return &Client{
 		BaseURL: baseURL,
@@ -61,4 +67,14 @@ func checkHTTPStatus(statusCode int, respBody []byte) error {
 		return fmt.Errorf("HTTP %d: %s", statusCode, respBody)
 	}
 	return nil
+}
+
+// GetVersion returns the client library version
+func GetVersion() string {
+	return Version
+}
+
+// GetLibraryInfo returns library name and version
+func GetLibraryInfo() (string, string) {
+	return Name, Version
 }
