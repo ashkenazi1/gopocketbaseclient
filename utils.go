@@ -4,13 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 )
-
-// Compiled regex for better performance
-var pocketBaseIDRegex = regexp.MustCompile("^[a-zA-Z0-9]+$")
 
 // Authentication methods
 
@@ -34,7 +30,7 @@ func (c *Client) Login(identity, password string) (*AuthResponse, error) {
 	}
 
 	var authResponse AuthResponse
-	err = json.Unmarshal(respBody, &authResponse)
+	err = UnmarshalPocketBaseJSON(respBody, &authResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse login response: %w", err)
 	}
@@ -67,7 +63,7 @@ func (c *Client) Register(req RegisterRequest) (*AuthResponse, error) {
 	}
 
 	var user User
-	err = json.Unmarshal(respBody, &user)
+	err = UnmarshalPocketBaseJSON(respBody, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse registration response: %w", err)
 	}
@@ -108,7 +104,7 @@ func (c *Client) CreateUser(req RegisterRequest) (*User, error) {
 	}
 
 	var user User
-	err = json.Unmarshal(respBody, &user)
+	err = UnmarshalPocketBaseJSON(respBody, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse user creation response: %w", err)
 	}
@@ -124,7 +120,7 @@ func (c *Client) RefreshAuth() (*AuthResponse, error) {
 	}
 
 	var authResponse AuthResponse
-	err = json.Unmarshal(respBody, &authResponse)
+	err = UnmarshalPocketBaseJSON(respBody, &authResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse refresh response: %w", err)
 	}
@@ -158,7 +154,7 @@ func (c *Client) GetCurrentUser() (*User, error) {
 	}
 
 	var authResponse AuthResponse
-	err = json.Unmarshal(respBody, &authResponse)
+	err = UnmarshalPocketBaseJSON(respBody, &authResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse user response: %w", err)
 	}
@@ -270,41 +266,6 @@ func (c *Client) UpdateUser(userID string, updates map[string]interface{}) (*Use
 	return &user, nil
 }
 
-// Smart relationship detection functions
-
-// isPocketBaseID checks if a string looks like a PocketBase record ID
-func isPocketBaseID(s string) bool {
-	if len(s) != 15 {
-		return false
-	}
-	// PocketBase IDs are 15-character alphanumeric strings
-	return pocketBaseIDRegex.MatchString(s)
-}
-
-// isArrayOfPocketBaseIDs checks if an array contains PocketBase IDs
-func isArrayOfPocketBaseIDs(arr []interface{}) bool {
-	if len(arr) == 0 {
-		return false
-	}
-
-	// Check first few elements to determine if it's an ID array
-	checkCount := len(arr)
-	if checkCount > 3 {
-		checkCount = 3 // Check max 3 elements for performance
-	}
-
-	for i := 0; i < checkCount; i++ {
-		if str, ok := arr[i].(string); ok {
-			if !isPocketBaseID(str) {
-				return false
-			}
-		} else {
-			return false
-		}
-	}
-	return true
-}
-
 // GetRecordsWithExpand fetches records with explicit relationship expansion
 func (c *Client) GetRecordsWithExpand(collection string, filters map[string]string, expandFields []string) (*JSONItems, error) {
 	// Build filter string
@@ -341,7 +302,7 @@ func (c *Client) GetRecordsWithExpand(collection string, filters map[string]stri
 	}
 
 	var records JSONItems
-	err = json.Unmarshal(respBody, &records)
+	err = UnmarshalPocketBaseJSON(respBody, &records)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +386,7 @@ func (c *Client) GetRecords(collection string, filters map[string]interface{}) (
 	}
 
 	var records JSONItems
-	err = json.Unmarshal(respBody, &records)
+	err = UnmarshalPocketBaseJSON(respBody, &records)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +406,7 @@ func (c *Client) All(collection string) (*JSONItems, error) {
 	}
 
 	var data JSONItems
-	err = json.Unmarshal(respBody, &data)
+	err = UnmarshalPocketBaseJSON(respBody, &data)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +461,7 @@ func All(c *Client, collection string) (*JSONItems, error) {
 	}
 
 	var data JSONItems
-	err = json.Unmarshal(respBody, &data)
+	err = UnmarshalPocketBaseJSON(respBody, &data)
 	if err != nil {
 		return nil, err
 	}
@@ -931,7 +892,7 @@ func (c *Client) getAllRecordsForMigration(collection string) ([]MigrationRecord
 
 	// Parse the JSON items
 	var records []map[string]interface{}
-	if err := json.Unmarshal(jsonItems.Items, &records); err != nil {
+	if err := UnmarshalPocketBaseJSON(jsonItems.Items, &records); err != nil {
 		return nil, fmt.Errorf("failed to parse records: %w", err)
 	}
 
@@ -1071,7 +1032,7 @@ func (c *Client) recordExistsInDestination(destClient *Client, collectionName st
 	}
 
 	var destRecords []map[string]interface{}
-	if err := json.Unmarshal(jsonItems.Items, &destRecords); err != nil {
+	if err := UnmarshalPocketBaseJSON(jsonItems.Items, &destRecords); err != nil {
 		return false, err
 	}
 

@@ -2,7 +2,6 @@ package gopocketbaseclient
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +28,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	var reqBody []byte
 	var err error
 	if body != nil {
-		reqBody, err = json.Marshal(body)
+		reqBody, err = MarshalPocketBaseJSON(body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
