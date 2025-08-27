@@ -452,7 +452,7 @@ func (c *Client) GetRecords(collection string, filters map[string]interface{}) (
 		first = false
 	}
 	builder.WriteByte(')')
-	
+
 	encodedFilterString := url.QueryEscape(builder.String())
 
 	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=%s", collection, encodedFilterString)
