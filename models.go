@@ -72,6 +72,14 @@ type PasswordResetConfirm struct {
 	PasswordConfirm string `json:"passwordConfirm"`
 }
 
+// JWTValidationResponse represents the response from JWT validation
+type JWTValidationResponse struct {
+	Valid  bool   `json:"valid"`
+	UserID string `json:"user_id,omitempty"`
+	Email  string `json:"email,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 // PocketBaseTime wraps time.Time to handle PocketBase's date format
 type PocketBaseTime struct {
 	time.Time

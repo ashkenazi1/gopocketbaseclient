@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
@@ -15,10 +16,38 @@ const (
 )
 
 func NewClient(baseURL, jwtToken string) *Client {
+	// Create optimized transport with connection pooling
+	transport := &http.Transport{
+		// Connection pooling settings
+		MaxIdleConns:        100,              // Maximum idle connections across all hosts
+		MaxIdleConnsPerHost: 20,               // Maximum idle connections per host
+		MaxConnsPerHost:     50,               // Maximum connections per host
+		IdleConnTimeout:     90 * time.Second, // How long idle connections stay open
+		
+		// Timeout settings for better performance
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,  // Connection timeout
+			KeepAlive: 30 * time.Second, // Keep-alive probe interval
+		}).DialContext,
+		
+		// Response header timeout
+		ResponseHeaderTimeout: 10 * time.Second,
+		
+		// Expect continue timeout
+		ExpectContinueTimeout: 1 * time.Second,
+		
+		// TLS handshake timeout
+		TLSHandshakeTimeout: 5 * time.Second,
+		
+		// Disable compression for better CPU performance (PocketBase responses are usually small)
+		DisableCompression: true,
+	}
+
 	return &Client{
 		BaseURL: baseURL,
 		HTTPClient: &http.Client{
-			Timeout: time.Second * 10,
+			Transport: transport,
+			Timeout:   30 * time.Second, // Increased overall timeout for bulk operations
 		},
 		Token: jwtToken,
 	}

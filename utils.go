@@ -1,12 +1,30 @@
 package gopocketbaseclient
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
+
+// Compiled regex for better performance
+var pocketBaseIDRegex = regexp.MustCompile("^[a-zA-Z0-9]{15}$")
+
+// Sync pools for reusing objects and reducing allocations
+var stringBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return &strings.Builder{}
+	},
+}
+
+// Buffer pool for JSON operations
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 0, 1024) // Pre-allocate 1KB buffer
+	},
+}
 
 // Authentication methods
 
@@ -207,29 +225,36 @@ func (c *Client) GetAuthToken() string {
 	return c.Token
 }
 
-// CheckAuthConfig checks if the PocketBase instance is properly configured for authentication
-func (c *Client) CheckAuthConfig() error {
-	// Try to get the users collection info
-	respBody, err := c.doRequest("GET", "/api/collections/users", nil)
+// ValidateJWT validates a JWT token by making a request to PocketBase
+// This is a package-level function that can be used in applications to verify client tokens
+// Since we don't have access to the JWT secret, we validate by attempting to get user info
+// Creates a completely separate client instance to avoid affecting the original client's token
+func ValidateJWT(c *Client, token string) (*JWTValidationResponse, error) {
+	if token == "" {
+		return &JWTValidationResponse{
+			Valid: false,
+			Error: "token cannot be empty",
+		}, fmt.Errorf("token cannot be empty")
+	}
+
+	// Create a completely separate client instance for validation
+	// This ensures we don't interfere with the original client's admin token
+	validationClient := NewClient(c.BaseURL, token)
+
+	// Try to get current user info to validate the token
+	user, err := validationClient.GetCurrentUser()
 	if err != nil {
-		return fmt.Errorf("failed to check users collection config: %w", err)
+		return &JWTValidationResponse{
+			Valid: false,
+			Error: fmt.Sprintf("token validation failed: %v", err),
+		}, nil // Don't return error here, validation failed but function succeeded
 	}
 
-	// Parse the response to check if auth is enabled
-	var collection map[string]interface{}
-	err = json.Unmarshal(respBody, &collection)
-	if err != nil {
-		return fmt.Errorf("failed to parse collection config: %w", err)
-	}
-
-	// Check if the collection has auth enabled
-	if options, ok := collection["options"].(map[string]interface{}); ok {
-		if allowPasswordAuth, exists := options["allowPasswordAuth"].(bool); exists && !allowPasswordAuth {
-			return fmt.Errorf("users collection is not configured to allow password authentication")
-		}
-	}
-
-	return nil
+	return &JWTValidationResponse{
+		Valid:  true,
+		UserID: user.ID,
+		Email:  user.Email,
+	}, nil
 }
 
 // GetUser gets a user by ID (requires admin token or same user)
@@ -266,12 +291,50 @@ func (c *Client) UpdateUser(userID string, updates map[string]interface{}) (*Use
 	return &user, nil
 }
 
+// Smart relationship detection functions
+
+// isPocketBaseID checks if a string looks like a PocketBase record ID
+func isPocketBaseID(s string) bool {
+	// PocketBase IDs are exactly 15-character alphanumeric strings
+	return pocketBaseIDRegex.MatchString(s)
+}
+
+// isArrayOfPocketBaseIDs checks if an array contains PocketBase IDs
+func isArrayOfPocketBaseIDs(arr []interface{}) bool {
+	if len(arr) == 0 {
+		return false
+	}
+
+	// Check first few elements to determine if it's an ID array
+	checkCount := len(arr)
+	if checkCount > 3 {
+		checkCount = 3 // Check max 3 elements for performance
+	}
+
+	for i := 0; i < checkCount; i++ {
+		if str, ok := arr[i].(string); ok {
+			if !isPocketBaseID(str) {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
 // GetRecordsWithExpand fetches records with explicit relationship expansion
-func (c *Client) GetRecordsWithExpand(collection string, filters map[string]string, expandFields []string) (*JSONItems, error) {
-	// Build filter string
+func (c *Client) GetRecordsWithExpand(collection string, filters map[string]interface{}, expandFields []string) (*JSONItems, error) {
+	// Use string builder from pool for better performance
+	builder := stringBuilderPool.Get().(*strings.Builder)
+	builder.Reset()
+	defer stringBuilderPool.Put(builder)
+
+	// Build filter string with proper type handling
 	var filterParts []string
 	for column, value := range filters {
-		filterParts = append(filterParts, fmt.Sprintf("%s='%s'", column, value))
+		formattedValue := formatFilterValue(value)
+		filterParts = append(filterParts, fmt.Sprintf("%s=%s", column, formattedValue))
 	}
 
 	// Build base endpoint
@@ -331,7 +394,7 @@ func (c *Client) CreateRecord(collection string, record map[string]interface{}) 
 	}
 
 	var createdRecord map[string]interface{}
-	err = json.Unmarshal(respBody, &createdRecord)
+	err = UnmarshalPocketBaseJSON(respBody, &createdRecord)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal create record response: %w", err)
 	}
@@ -371,13 +434,26 @@ func (c *Client) GetRecords(collection string, filters map[string]interface{}) (
 		return nil, fmt.Errorf("collection name cannot be empty")
 	}
 
-	var filterParts []string
+	// Use string builder from pool for better performance
+	builder := stringBuilderPool.Get().(*strings.Builder)
+	builder.Reset()
+	defer stringBuilderPool.Put(builder)
+
+	// Build filter string efficiently
+	builder.WriteByte('(')
+	first := true
 	for column, value := range filters {
-		formattedValue := formatFilterValue(value)
-		filterParts = append(filterParts, fmt.Sprintf("%s=%s", column, formattedValue))
+		if !first {
+			builder.WriteString(" && ")
+		}
+		builder.WriteString(column)
+		builder.WriteByte('=')
+		builder.WriteString(formatFilterValue(value))
+		first = false
 	}
-	filterString := strings.Join(filterParts, " && ")
-	encodedFilterString := url.QueryEscape(fmt.Sprintf("(%s)", filterString))
+	builder.WriteByte(')')
+	
+	encodedFilterString := url.QueryEscape(builder.String())
 
 	endpoint := fmt.Sprintf("/api/collections/%s/records?filter=%s", collection, encodedFilterString)
 	respBody, err := c.doRequest("GET", endpoint, nil)
@@ -432,7 +508,7 @@ func (c *Client) UpdateRecord(collection, id string, record map[string]interface
 	}
 
 	var updatedRecord map[string]interface{}
-	err = json.Unmarshal(respBody, &updatedRecord)
+	err = UnmarshalPocketBaseJSON(respBody, &updatedRecord)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal update record response: %w", err)
 	}
@@ -451,22 +527,6 @@ func (c *Client) DeleteRecord(collection, id string) error {
 	endpoint := "/api/collections/" + collection + "/records/" + id
 	_, err := c.doRequest("DELETE", endpoint, nil)
 	return err
-}
-
-func All(c *Client, collection string) (*JSONItems, error) {
-	endpoint := "/api/collections/" + collection + "/records"
-	respBody, err := c.doRequest("GET", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var data JSONItems
-	err = UnmarshalPocketBaseJSON(respBody, &data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &data, nil
 }
 
 // Bulk Operations
@@ -531,7 +591,7 @@ func (c *Client) CreateMultipleRecords(collection string, records []map[string]i
 			if err == nil {
 				// Extract ID from response
 				var createdRecord map[string]interface{}
-				if unmarshalErr := json.Unmarshal(respBody, &createdRecord); unmarshalErr == nil {
+				if unmarshalErr := UnmarshalPocketBaseJSON(respBody, &createdRecord); unmarshalErr == nil {
 					if recordID, exists := createdRecord["id"]; exists {
 						id = fmt.Sprintf("%v", recordID)
 					}
@@ -741,7 +801,7 @@ func (c *Client) BulkUpsert(collection string, records []UpsertRecord) (*BulkOpe
 					} else {
 						// Extract ID from create response
 						var createdRecord map[string]interface{}
-						if unmarshalErr := json.Unmarshal(respBody, &createdRecord); unmarshalErr == nil {
+						if unmarshalErr := UnmarshalPocketBaseJSON(respBody, &createdRecord); unmarshalErr == nil {
 							if recordID, exists := createdRecord["id"]; exists {
 								finalID = fmt.Sprintf("%v", recordID)
 							}
@@ -758,7 +818,7 @@ func (c *Client) BulkUpsert(collection string, records []UpsertRecord) (*BulkOpe
 				} else {
 					// Extract ID from response
 					var createdRecord map[string]interface{}
-					if unmarshalErr := json.Unmarshal(respBody, &createdRecord); unmarshalErr == nil {
+					if unmarshalErr := UnmarshalPocketBaseJSON(respBody, &createdRecord); unmarshalErr == nil {
 						if recordID, exists := createdRecord["id"]; exists {
 							finalID = fmt.Sprintf("%v", recordID)
 						}
