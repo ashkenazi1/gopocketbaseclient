@@ -85,21 +85,18 @@ type PocketBaseTime struct {
 	time.Time
 }
 
-// UnmarshalJSON handles PocketBase's "2025-01-20 21:00:58.576Z" format
+// UnmarshalJSON handles PocketBase's "2025-01-20 21:00:58.576Z" format and null values
 func (pbt *PocketBaseTime) UnmarshalJSON(data []byte) error {
 	str := strings.Trim(string(data), `"`)
-	if str == "null" || str == "" {
+	if str == "null" || str == "" || str == "n/a" || str == "N/A" {
+		pbt.Time = time.Time{} // Set to zero time
 		return nil
 	}
 
-	// Try PocketBase format first: "2025-01-20 21:00:58.576Z"
-	t, err := time.Parse("2006-01-02 15:04:05.000Z", str)
+	// Use the improved parsePocketBaseTime function
+	t, err := parsePocketBaseTime(str)
 	if err != nil {
-		// Fallback to RFC3339 format: "2025-01-20T21:00:58.576Z"
-		t, err = time.Parse(time.RFC3339, str)
-		if err != nil {
-			return fmt.Errorf("cannot parse time %q: %w", str, err)
-		}
+		return fmt.Errorf("cannot parse time %q: %w", str, err)
 	}
 
 	pbt.Time = t
@@ -115,28 +112,71 @@ func (pbt PocketBaseTime) MarshalJSON() ([]byte, error) {
 	return json.Marshal(formatted)
 }
 
+// NullableTime represents a time that can be null
+type NullableTime struct {
+	Time  time.Time
+	Valid bool // Valid is true if Time is not null
+}
+
+// UnmarshalJSON handles null datetime values gracefully
+func (nt *NullableTime) UnmarshalJSON(data []byte) error {
+	str := strings.Trim(string(data), `"`)
+	if str == "null" || str == "" || str == "n/a" || str == "N/A" {
+		nt.Time = time.Time{}
+		nt.Valid = false
+		return nil
+	}
+
+	t, err := parsePocketBaseTime(str)
+	if err != nil {
+		nt.Time = time.Time{}
+		nt.Valid = false
+		return fmt.Errorf("cannot parse time %q: %w", str, err)
+	}
+
+	nt.Time = t
+	nt.Valid = true
+	return nil
+}
+
+// MarshalJSON formats time for PocketBase or null if not valid
+func (nt NullableTime) MarshalJSON() ([]byte, error) {
+	if !nt.Valid || nt.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	formatted := nt.Time.UTC().Format("2006-01-02 15:04:05.000Z")
+	return json.Marshal(formatted)
+}
+
 // Helper function to parse PocketBase time format
 func parsePocketBaseTime(timeStr string) (time.Time, error) {
-	if timeStr == "" {
+	// Handle null, empty, or "n/a" values
+	if timeStr == "" || timeStr == "null" || timeStr == "n/a" || timeStr == "N/A" {
 		return time.Time{}, nil
 	}
 
-	// Input validation
-	if len(timeStr) < 19 || len(timeStr) > 30 {
+	// Input validation - allow for more flexible length checking
+	if len(timeStr) < 10 {
 		return time.Time{}, fmt.Errorf("invalid time string length: %q", timeStr)
 	}
 
-	// Try PocketBase format first: "2025-01-20 21:00:58.576Z"
-	t, err := time.Parse("2006-01-02 15:04:05.000Z", timeStr)
-	if err != nil {
-		// Fallback to RFC3339 format: "2025-01-20T21:00:58.576Z"
-		t, err = time.Parse(time.RFC3339, timeStr)
-		if err != nil {
-			return time.Time{}, fmt.Errorf("cannot parse time %q: %w", timeStr, err)
+	// Try different time formats that PocketBase might use
+	formats := []string{
+		"2006-01-02 15:04:05.000Z", // PocketBase format
+		"2006-01-02T15:04:05.000Z", // RFC3339 with milliseconds
+		time.RFC3339,               // Standard RFC3339
+		"2006-01-02T15:04:05Z",     // RFC3339 without milliseconds
+		"2006-01-02 15:04:05",      // Without timezone
+		"2006-01-02",               // Date only
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, timeStr); err == nil {
+			return t, nil
 		}
 	}
 
-	return t, nil
+	return time.Time{}, fmt.Errorf("cannot parse time %q with any known format", timeStr)
 }
 
 // Helper function to format time for PocketBase
@@ -224,6 +264,14 @@ func convertTimeFields(data interface{}) interface{} {
 		}
 		return result
 	case string:
+		// Handle null/empty datetime values first
+		if v == "" || v == "null" || v == "n/a" || v == "N/A" {
+			// Check if this might be a time field by context or format
+			if isTimeString(v) || v == "" {
+				// Return zero time for empty/null time fields
+				return time.Time{}
+			}
+		}
 		// Try to parse as time if it looks like PocketBase time format
 		if isTimeString(v) {
 			if t, err := parsePocketBaseTime(v); err == nil {
@@ -264,15 +312,32 @@ func convertTimeFieldsForPocketBase(data interface{}) interface{} {
 
 // isTimeString checks if a string looks like a PocketBase time format
 func isTimeString(s string) bool {
-	if len(s) < 19 || len(s) > 30 {
+	// Handle empty strings and null values
+	if s == "" || s == "null" || s == "n/a" || s == "N/A" {
 		return false
 	}
-	// More precise check for PocketBase format: "2025-01-20 21:00:58.576Z" or RFC3339: "2025-01-20T21:00:58.576Z"
-	return (len(s) >= 20 &&
-		s[4] == '-' && s[7] == '-' &&
-		(s[10] == ' ' || s[10] == 'T') &&
-		s[13] == ':' && s[16] == ':' &&
-		strings.HasSuffix(s, "Z"))
+
+	// Check minimum length for a date
+	if len(s) < 10 {
+		return false
+	}
+
+	// Check for basic date format patterns
+	if len(s) >= 10 && s[4] == '-' && s[7] == '-' {
+		// Could be a date: "2025-01-20" or datetime
+		if len(s) == 10 {
+			return true // Date only format
+		}
+
+		// Check for datetime patterns
+		if len(s) >= 19 && (s[10] == ' ' || s[10] == 'T') &&
+			len(s) < 35 && // Reasonable upper limit
+			s[13] == ':' && s[16] == ':' {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Migration types

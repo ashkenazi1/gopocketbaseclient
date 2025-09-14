@@ -300,24 +300,42 @@ for _, migErr := range result.Errors {
 
 ### 🕒 Automatic Time Handling
 
-The library automatically handles PocketBase's non-standard date format (`"2025-01-20 21:00:58.576Z"`):
+The library automatically handles PocketBase's non-standard date format and **null datetime values**:
 
 ```go
-// Define structs with regular time.Time fields
+// Define structs with different datetime field types
 type Event struct {
 	gopocketbaseclient.BaseRecord
-	Title     string    `json:"title"`
-	StartTime time.Time `json:"start_time"`  // Automatically converted!
-	EndTime   time.Time `json:"end_time"`    // Automatically converted!
+	Title         string                             `json:"title"`
+	StartTime     time.Time                          `json:"start_time"`      // Zero time for null values
+	EndTime       gopocketbaseclient.PocketBaseTime  `json:"end_time"`        // Better PocketBase compatibility
+	CancelledDate gopocketbaseclient.NullableTime    `json:"cancelled_date"`  // Explicit null handling
 }
 
-// Use helper functions for manual conversion
+// Use helper functions for automatic conversion
 var events []Event
 err = gopocketbaseclient.UnmarshalPocketBaseJSON(jsonData, &events)
 
-// Or marshal Go structs to PocketBase format
-jsonData, err := gopocketbaseclient.MarshalPocketBaseJSON(events)
+// Check for null datetime values
+for _, event := range events {
+	if event.StartTime.IsZero() {
+		fmt.Println("Start time not set")
+	}
+	
+	if !event.CancelledDate.Valid {
+		fmt.Println("Event not cancelled")
+	} else {
+		fmt.Printf("Cancelled at: %s\n", event.CancelledDate.Time.Format("2006-01-02"))
+	}
+}
 ```
+
+**Null DateTime Support:**
+- ✅ Empty strings (`""`)
+- ✅ Null values (`null`)
+- ✅ N/A values (`"n/a"`, `"N/A"`)
+- ✅ Multiple datetime formats
+- ✅ Automatic conversion in `UnmarshalPocketBaseJSON`
 
 ## 🏗️ Data Models
 
