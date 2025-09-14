@@ -11,7 +11,7 @@ import (
 
 // Version information
 const (
-	Version = "1.4.3"
+	Version = "1.5.3"
 	Name    = "Go PocketBase Client"
 )
 
