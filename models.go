@@ -32,6 +32,15 @@ type JSONItems struct {
 	Items json.RawMessage `json:"items"`
 }
 
+// PaginatedResponse represents a paginated response from PocketBase
+type PaginatedResponse struct {
+	Page       int             `json:"page"`
+	PerPage    int             `json:"perPage"`
+	TotalItems int             `json:"totalItems"`
+	TotalPages int             `json:"totalPages"`
+	Items      json.RawMessage `json:"items"`
+}
+
 // Authentication types
 type User struct {
 	BaseRecord

@@ -337,14 +337,8 @@ func (c *Client) GetRecordsWithExpand(collection string, filters map[string]inte
 		filterParts = append(filterParts, fmt.Sprintf("%s=%s", column, formattedValue))
 	}
 
-	// Build base endpoint
-	endpoint := fmt.Sprintf("/api/collections/%s/records", collection)
-
-	// Add query parameters
+	// Build query parameters
 	params := url.Values{}
-
-	// Disable pagination by fetching all records
-	params.Add("perPage", "-1")
 
 	// Add filters if any
 	if len(filterParts) > 0 {
@@ -357,27 +351,59 @@ func (c *Client) GetRecordsWithExpand(collection string, filters map[string]inte
 		params.Add("expand", strings.Join(expandFields, ","))
 	}
 
-	// Build final URL
-	if len(params) > 0 {
-		endpoint += "?" + params.Encode()
+	var allRecords []interface{}
+	page := 1
+	perPage := 500 // Maximum allowed by PocketBase
+
+	for {
+		// Build endpoint with pagination
+		pageParams := url.Values{}
+		for k, v := range params {
+			pageParams[k] = v
+		}
+		pageParams.Add("page", fmt.Sprintf("%d", page))
+		pageParams.Add("perPage", fmt.Sprintf("%d", perPage))
+
+		endpoint := fmt.Sprintf("/api/collections/%s/records?%s", collection, pageParams.Encode())
+		respBody, err := c.doRequest("GET", endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var pageData PaginatedResponse
+		err = UnmarshalPocketBaseJSON(respBody, &pageData)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse items from this page
+		var pageItems []interface{}
+		if err := UnmarshalPocketBaseJSON(pageData.Items, &pageItems); err != nil {
+			return nil, fmt.Errorf("failed to parse page items: %w", err)
+		}
+
+		// Append to all records
+		allRecords = append(allRecords, pageItems...)
+
+		// Check if we've fetched all pages
+		if page >= pageData.TotalPages || len(pageItems) == 0 {
+			break
+		}
+		
+		page++
 	}
 
-	respBody, err := c.doRequest("GET", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var records JSONItems
-	err = UnmarshalPocketBaseJSON(respBody, &records)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(records.Items) == 0 {
+	if len(allRecords) == 0 {
 		return nil, fmt.Errorf("no records found")
 	}
 
-	return &records, nil
+	// Convert collected records back to JSON
+	itemsJSON, err := MarshalPocketBaseJSON(allRecords)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal all items: %w", err)
+	}
+
+	return &JSONItems{Items: itemsJSON}, nil
 }
 
 // Existing CRUD methods
@@ -457,40 +483,97 @@ func (c *Client) GetRecords(collection string, filters map[string]interface{}) (
 	builder.WriteByte(')')
 
 	encodedFilterString := url.QueryEscape(builder.String())
+	
+	var allRecords []interface{}
+	page := 1
+	perPage := 500 // Maximum allowed by PocketBase
 
-	endpoint := fmt.Sprintf("/api/collections/%s/records?perPage=-1&filter=%s", collection, encodedFilterString)
-	respBody, err := c.doRequest("GET", endpoint, nil)
-	if err != nil {
-		return nil, err
+	for {
+		endpoint := fmt.Sprintf("/api/collections/%s/records?page=%d&perPage=%d&filter=%s", 
+			collection, page, perPage, encodedFilterString)
+		respBody, err := c.doRequest("GET", endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var pageData PaginatedResponse
+		err = UnmarshalPocketBaseJSON(respBody, &pageData)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse items from this page
+		var pageItems []interface{}
+		if err := UnmarshalPocketBaseJSON(pageData.Items, &pageItems); err != nil {
+			return nil, fmt.Errorf("failed to parse page items: %w", err)
+		}
+
+		// Append to all records
+		allRecords = append(allRecords, pageItems...)
+
+		// Check if we've fetched all pages
+		if page >= pageData.TotalPages || len(pageItems) == 0 {
+			break
+		}
+		
+		page++
 	}
 
-	var records JSONItems
-	err = UnmarshalPocketBaseJSON(respBody, &records)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(records.Items) == 0 {
+	if len(allRecords) == 0 {
 		return nil, fmt.Errorf("no records found")
 	}
 
-	return &records, nil
+	// Convert collected records back to JSON
+	itemsJSON, err := MarshalPocketBaseJSON(allRecords)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal all items: %w", err)
+	}
+
+	return &JSONItems{Items: itemsJSON}, nil
 }
 
 func (c *Client) All(collection string) (*JSONItems, error) {
-	endpoint := "/api/collections/" + collection + "/records?perPage=-1"
-	respBody, err := c.doRequest("GET", endpoint, nil)
-	if err != nil {
-		return nil, err
+	var allRecords []interface{}
+	page := 1
+	perPage := 500 // Maximum allowed by PocketBase
+	
+	for {
+		endpoint := fmt.Sprintf("/api/collections/%s/records?page=%d&perPage=%d", collection, page, perPage)
+		respBody, err := c.doRequest("GET", endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var pageData PaginatedResponse
+		err = UnmarshalPocketBaseJSON(respBody, &pageData)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse items from this page
+		var pageItems []interface{}
+		if err := UnmarshalPocketBaseJSON(pageData.Items, &pageItems); err != nil {
+			return nil, fmt.Errorf("failed to parse page items: %w", err)
+		}
+
+		// Append to all records
+		allRecords = append(allRecords, pageItems...)
+
+		// Check if we've fetched all pages
+		if page >= pageData.TotalPages || len(pageItems) == 0 {
+			break
+		}
+		
+		page++
 	}
 
-	var data JSONItems
-	err = UnmarshalPocketBaseJSON(respBody, &data)
+	// Convert collected records back to JSON
+	itemsJSON, err := MarshalPocketBaseJSON(allRecords)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal all items: %w", err)
 	}
 
-	return &data, nil
+	return &JSONItems{Items: itemsJSON}, nil
 }
 
 func (c *Client) UpdateRecord(collection, id string, record map[string]interface{}) error {
