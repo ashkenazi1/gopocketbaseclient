@@ -1,3 +1,6 @@
 /vendor/
 *.log
 *.out
+pocketbase_inserter/
+.DS_Store
+*.tar.gz
