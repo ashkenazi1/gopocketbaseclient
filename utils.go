@@ -476,7 +476,12 @@ func (c *Client) GetRecords(collection string, filters map[string]interface{}) (
 			builder.WriteString(" && ")
 		}
 		builder.WriteString(column)
-		builder.WriteByte('=')
+
+		// Only add '=' if the column key doesn't already contain an operator
+		if !strings.ContainsAny(column, "=<>~") {
+			builder.WriteByte('=')
+		}
+
 		builder.WriteString(formatFilterValue(value))
 		first = false
 	}
